@@ -1,0 +1,16 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgm" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B9D"/>
+      <stop offset="55%" stop-color="#FF8A7A"/>
+      <stop offset="100%" stop-color="#FFB36B"/>
+    </linearGradient>
+  </defs>
+  <!-- Fundo total (sem cantos, máscara aplicada pelo sistema) -->
+  <rect width="512" height="512" fill="url(#bgm)"/>
+  <!-- Anéis menores pra caber no safe zone de 80% (≈ 204px de raio) -->
+  <circle cx="256" cy="256" r="130" fill="none" stroke="#FFFFFF" stroke-width="20" opacity="0.95"/>
+  <circle cx="256" cy="256" r="88" fill="none" stroke="#FFFFFF" stroke-width="20" opacity="0.95"/>
+  <circle cx="256" cy="256" r="42" fill="#FFFFFF"/>
+  <circle cx="247" cy="247" r="14" fill="#FFFFFF" opacity="0.6"/>
+</svg>

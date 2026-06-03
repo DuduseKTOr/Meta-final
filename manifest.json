@@ -1,0 +1,57 @@
+{
+  "name": "Cockpit Motorista 2026",
+  "short_name": "Motorista",
+  "description": "Painel completo para motoristas de aplicativo em Brasília — controle de faturamento, custos, metas, calendário, feriados e comando de voz.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080c10",
+  "theme_color": "#080c10",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "categories": ["productivity", "finance", "business"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Lançar dia",
+      "short_name": "Lançar",
+      "description": "Ir direto para lançamento do dia",
+      "url": "./index.html#calendario",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Comando de voz",
+      "short_name": "Voz",
+      "description": "Abrir comando de voz",
+      "url": "./index.html#voz",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "prefer_related_applications": false
+}

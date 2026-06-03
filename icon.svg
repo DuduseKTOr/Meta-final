@@ -1,0 +1,25 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B9D"/>
+      <stop offset="55%" stop-color="#FF8A7A"/>
+      <stop offset="100%" stop-color="#FFB36B"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="30%" cy="20%" r="60%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.30"/>
+      <stop offset="60%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Fundo arredondado -->
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+  <!-- Brilho sutil canto superior esquerdo -->
+  <rect width="512" height="512" rx="108" fill="url(#shine)"/>
+  <!-- Anel externo -->
+  <circle cx="256" cy="256" r="172" fill="none" stroke="#FFFFFF" stroke-width="22" opacity="0.95"/>
+  <!-- Anel médio -->
+  <circle cx="256" cy="256" r="116" fill="none" stroke="#FFFFFF" stroke-width="22" opacity="0.95"/>
+  <!-- Ponto central (bullseye) -->
+  <circle cx="256" cy="256" r="56" fill="#FFFFFF"/>
+  <!-- Reflexo pequeno no centro pra dar profundidade -->
+  <circle cx="244" cy="244" r="18" fill="#FFFFFF" opacity="0.6"/>
+</svg>
