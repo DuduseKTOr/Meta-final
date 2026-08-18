@@ -209,7 +209,6 @@ body{
   backdrop-filter:blur(20px) saturate(160%);
   -webkit-backdrop-filter:blur(20px) saturate(160%);
 }
-
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
 input[type=number]{-moz-appearance:textfield;}
@@ -4315,12 +4314,43 @@ let recog=null, vozGrav=false;
 function norm(t){
   return (t||'').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+    .replace(/[^a-z0-9\s$]/g,' ').replace(/\s+/g,' ').trim();
 }
-function vSet(msg, tipo){
+function falarVoz(msg){
+  if(!('speechSynthesis' in window)) return;
+
+  try{
+    window.speechSynthesis.cancel();
+
+    const texto = String(msg)
+  .replace(/[\u{1F300}-\u{1FAFF}]/gu,'')
+  .replace(/\s+/g,' ')
+  .trim();
+
+    if(!texto) return;
+
+    const fala = new SpeechSynthesisUtterance(texto);
+    fala.lang = 'pt-BR';
+    fala.rate = 1;
+    fala.pitch = 1;
+    fala.volume = 1;
+
+    window.speechSynthesis.speak(fala);
+  }catch(e){
+    console.warn('Resposta por voz indisponível:', e);
+  }
+}
+
+  function vSet(msg, tipo){
   const el = document.getElementById('vout'); if(!el) return;
-  el.textContent = msg; el.className = 'vout'+(tipo?' '+tipo:'');
+  el.textContent = msg;
+  el.className = 'vout'+(tipo?' '+tipo:'');
+
+  if(tipo === 'ok' || tipo === 'er2'){
+    falarVoz(msg);
+  }
 }
+
 function vStat(txt, estado){
   const bar = document.getElementById('vsbar'); if(!bar) return;
   bar.className = 'vsbar'+(estado?' '+estado:'');
@@ -4352,7 +4382,7 @@ function toggleVoz(){
     vozGrav=false; setVBtn(false); vStat('Recebido!','ok');
     const txt = e.results[0][0].transcript;
     vSet(`🎙 Entendido: "${txt}"\n\nProcessando...`,'info');
-    setTimeout(()=>processCmd(txt), 200);
+    setTimeout(()=>secretariaProcessar(txt), 200);
   };
   recog.onerror = (e)=>{
     vozGrav=false; setVBtn(false); recog=null;
@@ -4373,6 +4403,53 @@ function toggleVoz(){
     vozGrav=false; setVBtn(false); recog=null;
     vSet('❌ Não foi possível iniciar.\n'+e.message+'\n\nUse o campo de texto abaixo.','er2');
   }
+}
+function secretariaProcessar(txt){
+  const comando = txt.trim();
+
+  if(!comando) return;
+
+  vSet('🤖 Secretária: entendendo...','info');
+
+  setTimeout(() => {
+    let texto = comando
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'')
+      .replace(/r\$\s*/g,' ')
+      .replace(/\breais?\b/g,'')
+      .replace(/\bna\b|\bno\b|\bda\b|\bdo\b|\bem\b|\bpor\b/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+
+    const plataformas = [
+      {nome:'uber',    re:/\buber(?:\s+uberzinho)?\b/},
+      {nome:'99',      re:/\b(?:99|noventa e nove)\b/},
+      {nome:'indrive', re:/\bindrive\b/},
+      {nome:'ifood',   re:/\b(?:ifood|i food)\b/}
+    ];
+
+    const plataforma = plataformas.find(p => p.re.test(texto));
+
+    const valorMatch = texto.match(
+      /\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?/
+    );
+
+    if(plataforma && valorMatch){
+      let valor = valorMatch[0]
+        .replace(/\./g,'')
+        .replace(',','.');
+
+      const convertido = `${plataforma.nome} ${valor}`;
+
+      vSet(`🤖 Secretária: ${convertido}`,'ok');
+
+      processCmd(convertido);
+      return;
+    }
+
+    processCmd(comando);
+  },100);
 }
 function pararVoz(){
   vozGrav=false; setVBtn(false); vStat('Pronto','');
@@ -4405,12 +4482,12 @@ function processCmd(txtorig){
   }
 
   const platMatchers = [
-    {re:/(?:uber|uberzinho)\s+(?:de\s+)?(\d+(?:[,.]?\d+)?)(?:\s+(?:\u00e0s?|as|\u00e0)\s+(\d{1,2})(?::|h)?(\d{0,2}))?/, key:'uber', nm:'Uber'},
-    {re:/(?:ganhei|fature[iu]|fiz|recebi)\s+(\d+(?:[,.]?\d+)?)\s*(?:reais?)?\s+(?:na|no|pela|pelo|com\s+a)\s+uber(?:\s+(?:\u00e0s?|as|\u00e0)\s+(\d{1,2})(?::|h)?(\d{0,2}))?/, key:'uber', nm:'Uber'},
+    {re:/(?:uber|uberzinho)\s+(?:de\s+)?(?:r\$\s*)?(\d+(?:[,.]?\d+)?)(?:\s+(?:\u00e0s?|as|\u00e0)\s+(\d{1,2})(?::|h)?(\d{0,2}))?/, key:'uber', nm:'Uber'},    {re:/(?:ganhei|fature[iu]|fiz|recebi)\s*(?:r\$\s*)?(\d+(?:[.,]\d+)?)\s*(?:reais?)?\s+(?:na|no|pela|pelo|com\s+a)\s+uber(?:\s+(?:\u00e0s?|as|\u00e0)\s+(\d{1,2})(?::|h)?(\d{0,2}))?/, key:'uber', nm:'Uber'},
     {re:/(?:noventa\s+e\s+nove|99\s*app|app\s+99|noventa\s*9)\s+(?:de\s+)?(\d+(?:[,.]?\d+)?)(?:\s+(?:\u00e0s?|as|\u00e0)\s+(\d{1,2})(?::|h)?(\d{0,2}))?/, key:'n99', nm:'99'},
-    {re:/(?:ganhei|fature[iu]|fiz|recebi)\s+(\d+(?:[,.]?\d+)?)\s*(?:reais?)?\s+(?:na|no|pela|pelo|com\s+a)\s+(?:99|noventa\s+e\s+nove)(?:\s+(?:\u00e0s?|as|\u00e0)\s+(\d{1,2})(?::|h)?(\d{0,2}))?/, key:'n99', nm:'99'},
-    {re:/(?:in[\s-]?drive|in[\s-]?driver|indrive|in[\s-]?d[a\u00e1]ive)\s+(?:de\s+)?(\d+(?:[,.]?\d+)?)(?:\s+(?:\u00e0s?|as|\u00e0)\s+(\d{1,2})(?::|h)?(\d{0,2}))?/, key:'ind', nm:'inDrive'},
-    {re:/(?:ganhei|fature[iu]|fiz|recebi)\s+(\d+(?:[,.]?\d+)?)\s*(?:reais?)?\s+(?:na|no|pela|pelo|com\s+a)\s+(?:in[\s-]?drive|indrive|in[\s-]?driver)(?:\s+(?:\u00e0s?|as|\u00e0)\s+(\d{1,2})(?::|h)?(\d{0,2}))?/, key:'ind', nm:'inDrive'},
+    {re:/^99\s+(?:r\$\s*)?(\d+(?:[.,]\d+)?)(?:\s+reais?)?(?:\s+hoje)?$/i, key:'n99', nm:'99'},
+    {re:/(?:ganhei|fature[iu]|fiz|recebi)\s*(?:r\$\s*)?(\d+(?:[.,]\d+)?)\s*(?:reais?)?\s+(?:na|no|pela|pelo|com\s+a)\s+(?:99|noventa\s+e\s+nove)(?:\s+(?:\u00e0s?|as|\u00e0)\s+(\d{1,3})(?::|h)?(\d{0,2}))?/, key:'n99', nm:'99'},
+    {re:/(?:in[\s-]?drive|indrive)\s*(?:r\$\s*)?(\d+(?:[.,]\d+)?)\s*(?:(?:reais?)\s*)?(?:(?:hoje))?/i,key:'ind',nm:'inDrive'},
+    {re:/(?:in[\s-]?drive|indrive)\s*(?:[rR]\$\s*)?(\d+(?:[.,]\d+)?)\s*(?:(?:reais?)\s*)?(?:(?:hoje))?/i,key:'ind',nm:'inDrive'},    {re:/(?:ganhei|fature[iu]|fiz|recebi)\s*(?:r\$\s*)?(\d+(?:[.,]\d+)?)\s*(?:reais?)?\s+(?:na|no|pela|pelo|com\s+a)\s+(?:in[\s-]?drive|indrive|in[\s-]?driver)(?:\s+(?:\u00e0s?|as|\u00e0)\s+(\d{1,2})(?::|h)?(\d{0,2}))?/, key:'ind', nm:'inDrive'},
   ];
   for(const p of platMatchers){
     const m = txt.match(p.re);
@@ -4444,18 +4521,46 @@ function processCmd(txtorig){
     return;
   }
 
-  const mRec1 = txt.match(/(?:recarreguei|carreguei|reabasteci)\s+(\d+(?:[,.]?\d+)?)\s*(?:kwh|quilowatts?)\s+(?:por|de)\s+(\d+(?:[,.]?\d+)?)/);
-  const mRec2 = txt.match(/(?:recarreguei|carreguei|reabasteci)\s+(?:em\s+)?(\d+(?:[,.]?\d+)?)\s*(?:reais?|r\s*\$)/);
-  if(mRec1 || mRec2){
-    let kwh=0, valor=0;
-    if(mRec1){ kwh = parseFloat(mRec1[1].replace(',','.')); valor = parseFloat(mRec1[2].replace(',','.')); }
-    else { valor = parseFloat(mRec2[1].replace(',','.')); }
-    S.rec.push({id:Date.now(), dt:key, kwh, val:valor, km:0, local:'posto', desc:'Recarga (voz)'});
-    salvar(); atuDash(); stInfo();
-    vStat('Recarga lançada!','ok');
-    vSet(`⚡ Recarga registrada:\n   💰 R$ ${valor.toFixed(0)}${kwh?'\n   🔋 '+kwh.toFixed(1)+' kWh':''}${kwh?'\n   📊 R$/kWh: '+(valor/kwh).toFixed(2):''}`,'ok');
-    return;
+  const mRec1 = txt.match(/(?:recarreguei|carreguei|reabasteci|abasteci|abastecimento)\s+(\d+(?:[,.]?\d+)?)\s*(?:kwh|quilowatts?)\s+(?:por|de)\s+(\d+(?:[,.]?\d+)?)/);
+
+const mRec2 = txt.match(/(?:registrar\s+abastecimento|abastecer|recarreguei|carreguei|reabasteci|abasteci|abastecimento)\s+(?:em\s+)?(?:r\s*)?(?:\$\s*)?(\d+(?:[.,]\d+)?)\s*(?:reais?)?/i);
+
+// Só entra neste bloco se o comando realmente for de recarga
+if(mRec1 || mRec2){
+  let kwh = 0;
+  let valor = 0;
+
+  if(mRec1){
+    kwh = parseFloat(mRec1[1].replace(',','.'));
+    valor = parseFloat(mRec1[2].replace(',','.'));
+  } else {
+    valor = parseFloat(mRec2[1].replace(',','.'));
   }
+
+  S.rec.push({
+    id: Date.now(),
+    dt: key,
+    kwh,
+    val: valor,
+    km: 0,
+    local: 'posto',
+    desc: 'Recarga (voz)'
+  });
+
+  salvar();
+  atuDash();
+  stInfo();
+
+  vStat('Recarga lançada!','ok');
+
+  vSet(
+    `⚡ Recarga registrada:
+   💰 R$ ${valor.toFixed(0)}${kwh ? '\n   🔋 ' + kwh.toFixed(1) + ' kWh' : ''}${kwh ? '\n   📊 R$/kWh: ' + (valor/kwh).toFixed(2) : ''}`,
+    'ok'
+  );
+
+  return;
+}
 
   const desVoz = [
     {re:/(?:presta[\u00e7c][a\u00e3]o|prestacao|financiamento)\s+(?:de\s+)?(\d+(?:[,.]?\d+)?)/, cat:'prestacao', nm:'Prestação'},
@@ -4552,7 +4657,7 @@ function processCmd(txtorig){
     for(let i=0;i<7;i++){
       const dSem = new Date(hj); dSem.setDate(hj.getDate()-dow+i);
       ms += mDia(dSem);
-      const kSem = toK(dSem);
+      const kSem = toK(dSem);const mRec2 = txt.match
       if(S.lan[kSem]) ts += +(S.lan[kSem].v||S.lan[kSem].valor||0), dok++;
     }
     vStat('Consultado','ok');
