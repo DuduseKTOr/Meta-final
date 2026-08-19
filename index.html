@@ -4942,6 +4942,7 @@ async function syncToDrive(){
     driveState.lastSync = Date.now();
     localStorage.setItem('driveLastSync', driveState.lastSync);
     atualizarUIDrive('on', 'Última sincronização: agora.');
+    renderBkpStatus();
   }catch(e){
     console.error('Drive sync error:', e);
     atualizarUIDrive('error', 'Erro: '+e.message);
@@ -4982,6 +4983,7 @@ function desconectarDrive(){
 }
 function atualizarUIDrive(status, msg){
   driveState.status = status;
+  renderBkpStatus();
 
   const stEl = document.getElementById('drv-st');
   const infoEl = document.getElementById('drv-info');
