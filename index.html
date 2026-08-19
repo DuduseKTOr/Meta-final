@@ -3285,28 +3285,96 @@ function exportar(){
 // BACKUP
 // ============================================================
 function getDiasSemBackup(){
-  const last = parseInt(localStorage.getItem('lastBackup') || '0');
+  const lastManual = parseInt(localStorage.getItem('lastBackup') || '0');
+  const lastDrive = (typeof driveState !== 'undefined' && driveState.lastSync)
+    ? Number(driveState.lastSync)
+    : 0;
+
+  const last = Math.max(lastManual, lastDrive);
+
   if(!last) return -1;
   return Math.floor((Date.now() - last) / 86400000);
 }
 function renderBkpStatus(){
   const box = document.getElementById('bkp-status-box'); if(!box) return;
+
   const dias = getDiasSemBackup();
+
+  const driveConectado =
+    typeof driveState !== 'undefined' &&
+    (driveState.status === 'on' || driveState.status === 'syncing');
+
+  const driveComErro =
+    typeof driveState !== 'undefined' &&
+    driveState.status === 'error';
+
+  const lastDrive =
+    typeof driveState !== 'undefined' && driveState.lastSync
+      ? Number(driveState.lastSync)
+      : 0;
+
+  const driveRecente =
+    lastDrive > 0 &&
+    Math.floor((Date.now() - lastDrive) / 86400000) <= 6;
+
   let cls, ic, titulo, msg;
-  if(dias < 0){ cls='bkp-warn'; ic='⚠️'; titulo='Nenhum backup feito'; msg='Exporte agora para proteger seus dados.'; }
-  else if(dias <= 6){ cls='bkp-ok'; ic='✅'; titulo='Backup em dia'; msg = dias===0 ? 'Último backup hoje.' : `Último backup há ${dias} dia${dias>1?'s':''}.`; }
-  else if(dias <= 13){ cls='bkp-warn'; ic='⚠️'; titulo=`${dias} dias sem backup`; msg='Recomendado exportar agora.'; }
-  else { cls='bkp-danger'; ic='🚨'; titulo=`${dias} dias sem backup!`; msg='URGENTE: exporte agora.'; }
+
+  if(driveConectado && driveRecente){
+    cls = 'bkp-ok';
+    ic = '🛡️';
+    titulo = 'Backup protegido';
+    const dt = new Date(lastDrive).toLocaleString('pt-BR');
+    msg = `Google Drive conectado. Última sincronização: ${dt}.`;
+  }
+  else if(dias < 0){
+    cls = 'bkp-warn';
+    ic = '⚠️';
+    titulo = 'Nenhum backup feito';
+    msg = 'Exporte agora para proteger seus dados.';
+  }
+  else if(driveComErro){
+    cls = 'bkp-warn';
+    ic = '⚠️';
+    titulo = 'Backup precisa de atenção';
+    msg = dias === 0
+      ? 'O backup local está atualizado, mas o Google Drive apresentou um problema.'
+      : `Último backup há ${dias} dia${dias>1?'s':''}. Verifique o Google Drive.`;
+  }
+  else if(dias <= 6){
+    cls = 'bkp-ok';
+    ic = '✅';
+    titulo = 'Backup em dia';
+    msg = dias === 0
+      ? 'Último backup hoje.'
+      : `Último backup há ${dias} dia${dias>1?'s':''}.`;
+  }
+  else if(dias <= 13){
+    cls = 'bkp-warn';
+    ic = '⚠️';
+    titulo = 'Backup precisa de atenção';
+    msg = `Último backup há ${dias} dias. Recomendado exportar agora.`;
+  }
+  else{
+    cls = 'bkp-danger';
+    ic = '🚨';
+    titulo = 'Backup crítico';
+    msg = `${dias} dias sem backup. Exporte agora para evitar perda de dados.`;
+  }
+
   const persistOK = localStorage.getItem('persistGranted') === '1';
+
   const persistBadge = persistOK
     ? '<span class="persist-badge persist-ok">🔒 storage protegido</span>'
     : '<span class="persist-badge persist-no">⚠ sem garantia</span>';
+
   box.innerHTML = `<div class="bkp-status ${cls}">
     <div class="bkp-ic">${ic}</div>
-    <div class="bkp-txt"><strong>${titulo} ${persistBadge}</strong><span>${msg}</span></div>
+    <div class="bkp-txt">
+      <strong>${titulo} ${persistBadge}</strong>
+      <span>${msg}</span>
+    </div>
   </div>`;
 }
-
 function checarBackupPendente(){
   const dias = getDiasSemBackup();
   const adiado = parseInt(localStorage.getItem('bkpAdiado') || '0');
@@ -3844,7 +3912,7 @@ function renderCal(){
     g.innerHTML += `<div class="${cls}" onclick="abrirDia('${k}')">
       <span class="cn">${d}</span>
       <span class="cv2">${lan?'R$'+lan.v:''}</span>
-      <span class="cm2">${lan?'':('R$'+meta)}</span>
+      <span class="cm2">${'R$'+meta}</span>
       ${fer.length?`<div class="ftag">${fer[0].n.split(' ')[0]}</div>`:''}
     </div>`;
   }
@@ -4797,8 +4865,13 @@ async function conectarDrive(){
         driveState.accessToken = response.access_token;
         driveState.tokenExpiry = Date.now() + (response.expires_in*1000) - 30000;
         await buscarOuCriarArquivo();
-        await syncToDrive();
-        atualizarUIDrive('on', 'Conectado e sincronizado.');
+
+        if(driveState.fileId){
+          atualizarUIDrive('on', 'Backup encontrado no Drive. Escolha Restaurar ou Sincronizar.');
+        }else{
+          await syncToDrive();
+          atualizarUIDrive('on', 'Primeiro backup criado.');
+        }
       },
       error_callback: (err) => { atualizarUIDrive('error', err.message || 'Erro ao autenticar'); }
     });
@@ -4909,44 +4982,99 @@ function desconectarDrive(){
 }
 function atualizarUIDrive(status, msg){
   driveState.status = status;
+
   const stEl = document.getElementById('drv-st');
   const infoEl = document.getElementById('drv-info');
   const btnsEl = document.getElementById('drv-btns');
+
   if(!stEl || !infoEl || !btnsEl) return;
+
   const stMap = {
-    off: {cls:'drv-st-off', txt:'DESCONECTADO'},
+    off:        {cls:'drv-st-off',  txt:'DESCONECTADO'},
     connecting: {cls:'drv-st-sync', txt:'CONECTANDO...'},
-    on: {cls:'drv-st-on', txt:'CONECTADO'},
-    syncing: {cls:'drv-st-sync', txt:'SINCRONIZANDO'},
-    error: {cls:'drv-st-err', txt:'ERRO'},
+    on:         {cls:'drv-st-on',   txt:'CONECTADO'},
+    syncing:    {cls:'drv-st-sync', txt:'SINCRONIZANDO'},
+    error:      {cls:'drv-st-err',  txt:'ERRO'}
   };
+
   const s = stMap[status] || stMap.off;
-  stEl.className = 'drv-st '+s.cls;
+
+  stEl.className = 'drv-st ' + s.cls;
   stEl.textContent = s.txt;
+
   let info = '';
-  if(status==='off'){
-    if(!driveState.clientId) info = 'Configure uma vez e seus dados são salvos automaticamente no Drive.';
-    else info = `<strong>Client ID configurado.</strong> Toque em "Conectar Drive" para autorizar e iniciar.`;
-  } else if(status==='on'){
-    const dt = driveState.lastSync ? new Date(driveState.lastSync).toLocaleString('pt-BR') : '—';
-    info = `<strong>✅ Backup automático ativo.</strong><br>Última sincronização: ${dt}<br>${msg||''}`;
-  } else if(status==='error'){
-    info = `<strong>❌ Erro na sincronização.</strong><br>${msg||''}<br><small>Tente reconectar.</small>`;
-  } else { info = msg || ''; }
-  infoEl.innerHTML = info;
   let btns = '';
-  if(status==='off' || status==='error'){
+
+  if(status === 'off'){
     if(!driveState.clientId){
-      btns = `<button class="drv-btn-p" onclick="abrirConfigDrive()">⚙️ CONFIGURAR</button>`;
-    } else {
-      btns = `<button class="drv-btn-p" onclick="conectarDrive()">🔗 CONECTAR DRIVE</button>
-              <button class="drv-btn-s" onclick="abrirConfigDrive()">⚙️ ALTERAR ID</button>`;
+      info = 'Configure uma vez e seus dados serao salvos automaticamente no Drive.';
+      btns = `
+        <button class="drv-btn-p" onclick="abrirConfigDrive()">
+          CONFIGURAR DRIVE
+        </button>`;
+    }else{
+      info = '<strong>Client ID configurado.</strong> Toque em "Conectar Drive" para autorizar e iniciar.';
+      btns = `
+        <button class="drv-btn-p" onclick="conectarDrive()">
+          CONECTAR DRIVE
+        </button>
+        <button class="drv-btn-s" onclick="abrirConfigDrive()">
+          ALTERAR ID
+        </button>`;
     }
-  } else if(status==='on'){
-    btns = `<button class="drv-btn-p" onclick="syncToDrive()">🔄 SINCRONIZAR AGORA</button>
-            <button class="drv-btn-s" onclick="restoreFromDrive()">⬇ RESTAURAR DO DRIVE</button>
-            <button class="drv-btn-d" onclick="desconectarDrive()">DESCONECTAR</button>`;
+
+  }else if(status === 'connecting'){
+    info = 'Conectando ao Google e solicitando autorizacao...';
+    btns = `
+      <button class="drv-btn-s" onclick="abrirConfigDrive()">
+        ALTERAR ID
+      </button>`;
+
+  }else if(status === 'syncing'){
+    info = msg || 'Sincronizando seus dados com o Google Drive...';
+    btns = `
+      <button class="drv-btn-s" disabled>
+        SINCRONIZANDO...
+      </button>`;
+
+  }else if(status === 'on'){
+    const dt = driveState.lastSync
+      ? new Date(driveState.lastSync).toLocaleString('pt-BR')
+      : '--';
+
+    info = `
+      <strong>Backup automatico ativo.</strong><br>
+      Ultima sincronizacao: ${dt}<br>
+      ${msg || ''}
+    `;
+
+    btns = `
+      <button class="drv-btn-p" onclick="syncToDrive()">
+        SINCRONIZAR AGORA
+      </button>
+      <button class="drv-btn-s" onclick="restoreFromDrive()">
+        RESTAURAR DO DRIVE
+      </button>
+      <button class="drv-btn-d" onclick="desconectarDrive()">
+        DESCONECTAR
+      </button>`;
+
+  }else if(status === 'error'){
+    info = `
+      <strong>Erro na conexao com o Google Drive.</strong><br>
+      ${msg || 'Nao foi possivel concluir a operacao.'}
+    `;
+
+    btns = `
+      <button class="drv-btn-p" onclick="conectarDrive()">
+        TENTAR NOVAMENTE
+      </button>
+      <button class="drv-btn-s" onclick="abrirConfigDrive()">
+        ALTERAR ID
+      </button>`;
   }
+
+  infoEl.innerHTML = info;
   btnsEl.innerHTML = btns;
 }
 function salvarLocalSemSync(){
@@ -4968,14 +5096,25 @@ async function tentarReconectarDrive(){
       scope: DRIVE_SCOPE,
       callback: async (response) => {
         if(response.error){ atualizarUIDrive('off', ''); return; }
+
         driveState.accessToken = response.access_token;
         driveState.tokenExpiry = Date.now() + (response.expires_in*1000) - 30000;
-        atualizarUIDrive('on', 'Reconectado.');
+
+        await buscarOuCriarArquivo();
+
+        if(driveState.fileId){
+          atualizarUIDrive('on', 'Backup encontrado no Drive. Escolha Restaurar ou Sincronizar.');
+        }else{
+          atualizarUIDrive('on', 'Reconectado, mas nenhum backup foi encontrado.');
+        }
       },
       error_callback: () => { atualizarUIDrive('off', ''); }
     });
+
     driveState.tokenClient.requestAccessToken({ prompt: '' });
-  }catch(e){}
+  }catch(e){
+    console.warn('Drive: erro ao reconectar', e);
+  }
 }
 
 // ============================================================
