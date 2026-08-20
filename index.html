@@ -5332,9 +5332,11 @@ pedirPersistencia().then(() => renderBkpStatus());
 checarBackupPendente();
 
 // Drive
-atualizarUIDrive('off', '');
 if(driveState.clientId && driveState.fileId){
+  atualizarUIDrive('connecting', 'Reconectando ao Google Drive...');
   setTimeout(() => tentarReconectarDrive(), 1500);
+}else{
+  atualizarUIDrive('off', '');
 }
 // ============================================================
 // FEATURES NOVAS
