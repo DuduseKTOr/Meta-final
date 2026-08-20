@@ -5333,6 +5333,9 @@ checarBackupPendente();
 
 // Drive
 atualizarUIDrive('off', '');
+if(driveState.clientId && driveState.fileId){
+  setTimeout(() => tentarReconectarDrive(), 1500);
+}
 // ============================================================
 // FEATURES NOVAS
 // ============================================================
