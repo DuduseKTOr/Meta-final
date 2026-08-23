@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -3241,8 +3241,10 @@ function carregar(){
       S.cus = restantes;
       if(S.rec.length || S.man.length) salvar();
     }
+    let lanMigrado = false;
     Object.keys(S.lan).forEach(k => {
       const lan = S.lan[k];
+      const tinhaValorLegado = Object.prototype.hasOwnProperty.call(lan,'valor');
       if(!Array.isArray(lan.turnos)){
         lan.turnos = [];
         ['uber','n99','ind','out'].forEach(p => {
@@ -3254,7 +3256,9 @@ function carregar(){
         }
       }
       recalcLan(k);
+      if(tinhaValorLegado || !lan || !S.lan[k]) lanMigrado = true;
     });
+    if(lanMigrado) salvar();
   }catch(e){ console.error('Erro ao carregar:', e); }
 }
 
@@ -3495,6 +3499,16 @@ function setGreeting(){
 function recalcLan(k){
   const lan = S.lan[k]; if(!lan) return;
   if(!Array.isArray(lan.turnos)) lan.turnos = [];
+  // Compatibilidade com versões antigas que usavam `valor` como total.
+  // Se não houver turnos nem valores por plataforma, migra o legado para
+  // um turno "Outra" antes de recalcular. Depois `valor` deixa de existir,
+  // evitando que o Dashboard ressuscite um valor apagado.
+  if(lan.turnos.length===0){
+    const legado = +(lan.valor||0);
+    if(legado>0){
+      lan.turnos.push({id:Date.now()+Math.random()*1000, hora:'', plat:'out', val:legado});
+    }
+  }
   let u=0, n=0, i=0, o=0;
   lan.turnos.forEach(t => {
     const v = +(t.val||0);
@@ -3505,6 +3519,8 @@ function recalcLan(k){
   });
   lan.uber=u; lan.n99=n; lan.ind=i; lan.out=o;
   lan.v = u+n+i+o;
+  // `v` é a fonte única da verdade. Nunca mantenha `valor` em paralelo.
+  delete lan.valor;
   if(lan.v===0 && (!lan.km || lan.km===0)) delete S.lan[k];
 }
 function _editandoData(){ return document.getElementById('cal-d')?.value || toK(new Date()); }
@@ -3693,7 +3709,7 @@ function atuDash(){
     const k=`${ano}-${p2(mes+1)}-${p2(d)}`;
     if(S.lan[k]){
       const lan = S.lan[k];
-      const v = +(lan.v||lan.valor||0);
+      const v = +(lan.v||0);
       fat += v; dl++;
       plat.uber += +(lan.uber||0);
       plat.n99  += +(lan.n99||0);
@@ -3787,7 +3803,7 @@ function atuDash(){
 
   // Anual
   let tano=0;
-  for(const k in S.lan){ const d=new Date(k+'T00:00:00'); if(d.getFullYear()===ano) tano+=+(S.lan[k].v||S.lan[k].valor||0); }
+  for(const k in S.lan){ const d=new Date(k+'T00:00:00'); if(d.getFullYear()===ano) tano+=+(S.lan[k].v||0); }
   const mp = mes+1;
   document.getElementById('db-ano').textContent = brl(tano);
   document.getElementById('db-mr').textContent  = 12-mes;
@@ -4545,7 +4561,7 @@ function processCmd(txtorig){
 
   function somaLan(m, a){
     let s=0;
-    for(const k in S.lan){ const d=new Date(k+'T00:00:00'); if(d.getMonth()===m&&d.getFullYear()===a) s+=+(S.lan[k].v||S.lan[k].valor||0); }
+    for(const k in S.lan){ const d=new Date(k+'T00:00:00'); if(d.getMonth()===m&&d.getFullYear()===a) s+=+(S.lan[k].v||0); }
     return s;
   }
 
@@ -4696,7 +4712,7 @@ if(mRec1 || mRec2){
   if(txt.includes('meta')&&(txt.includes('hoje')||txt.includes('dia'))){
     const metaH = mDia(hj);
     const lanH = S.lan[key];
-    const valH = lanH ? +(lanH.v||lanH.valor||0) : 0;
+    const valH = lanH ? +(lanH.v||0) : 0;
     vStat('Consultado','ok');
     vSet(`🎯 Meta de hoje (${DS[hj.getDay()]}, ${hj.getDate()}/${hj.getMonth()+1}):\n\n   💰 Meta: R$ ${metaH}\n${lanH?`   ✅ Lançado: R$ ${valH}\n   📊 Saldo: ${valH>=metaH?'+R$'+(valH-metaH)+' 🟢':'R$'+(valH-metaH)+' 🔴'}`:'   ⏳ Sem lançamento ainda.'}`,'info');
     return;
@@ -4726,7 +4742,7 @@ if(mRec1 || mRec2){
       const dSem = new Date(hj); dSem.setDate(hj.getDate()-dow+i);
       ms += mDia(dSem);
       const kSem = toK(dSem);const mRec2 = txt.match
-      if(S.lan[kSem]) ts += +(S.lan[kSem].v||S.lan[kSem].valor||0), dok++;
+      if(S.lan[kSem]) ts += +(S.lan[kSem].v||0), dok++;
     }
     vStat('Consultado','ok');
     vSet(`📅 Semana atual:\n\n   💰 Faturado: R$ ${ts}\n   🎯 Meta: R$ ${ms}\n   📊 ${dok} dias lançados\n\n${ts>=ms?'🟢 Acima da meta! +R$'+(ts-ms):'🔴 Falta R$'+(ms-ts)}`,(ts>=ms?'ok':'info'));
