@@ -3,7 +3,7 @@
 // Estratégia: cache-first para shell, network-first para fontes
 // ============================================================
 
-const CACHE_VERSION = 'motorista-v2.6.0';
+const CACHE_VERSION = 'motorista-v2.6.1';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -11,6 +11,7 @@ const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const SHELL_FILES = [
   './',
   './index.html',
+  './drive-reconnect.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -87,6 +88,35 @@ self.addEventListener('fetch', (event) => {
 // ESTRATÉGIAS
 // ============================================================
 
+// Injeta o hook de reconexão apenas no HTML principal.
+// Isso corrige instalações antigas que ainda têm um index.html
+// em cache sem precisar alterar o arquivo monolítico do app.
+async function injetarReconexaoDrive(response, request) {
+  if(!response || !response.ok) return response;
+  if(!request.headers.get('accept')?.includes('text/html')) return response;
+  if(!new URL(request.url).pathname.endsWith('/index.html') &&
+     new URL(request.url).pathname !== '/') return response;
+
+  try{
+    const html = await response.clone().text();
+    if(html.includes('drive-reconnect.js')) return response;
+
+    const atualizado = html.replace(
+      /<\/body>/i,
+      '<script src="./drive-reconnect.js" defer><\/script>\n</body>'
+    );
+
+    return new Response(atualizado, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers
+    });
+  }catch(e){
+    console.warn('[SW] Não foi possível injetar reconexão Drive:', e);
+    return response;
+  }
+}
+
 // Cache-first: serve do cache, atualiza em background
 async function cacheFirst(request) {
   const cached = await caches.match(request);
@@ -97,7 +127,7 @@ async function cacheFirst(request) {
         caches.open(SHELL_CACHE).then((c) => c.put(request, response));
       }
     }).catch(() => {});
-    return cached;
+    return injetarReconexaoDrive(cached, request);
   }
   // Não está no cache, busca da rede
   try {
@@ -106,11 +136,12 @@ async function cacheFirst(request) {
       const cache = await caches.open(SHELL_CACHE);
       cache.put(request, response.clone());
     }
-    return response;
+    return injetarReconexaoDrive(response, request);
   } catch (err) {
     // Sem rede e sem cache — retorna fallback para HTML
     if (request.headers.get('accept')?.includes('text/html')) {
-      return caches.match('./index.html');
+      const fallback = await caches.match('./index.html');
+      return injetarReconexaoDrive(fallback, request);
     }
     throw err;
   }
