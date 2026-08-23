@@ -3,7 +3,7 @@
 // Estratégia: cache-first para shell, network-first para fontes
 // ============================================================
 
-const CACHE_VERSION = 'motorista-v2.6.1';
+const CACHE_VERSION = 'motorista-v2.6.2';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -119,71 +119,50 @@ async function injetarReconexaoDrive(response, request) {
       headers
     });
   }catch(e){
-    console.warn('[SW] Não foi possível injetar reconexão Drive:', e);
+    console.warn('[SW] Falha ao injetar reconexão do Drive:', e);
     return response;
   }
 }
 
-// Cache-first: serve do cache, atualiza em background
-async function cacheFirst(request) {
+async function cacheFirst(request){
   const cached = await caches.match(request);
-  if (cached) {
-    // Atualiza em background (não bloqueia)
-    fetch(request).then((response) => {
-      if (response && response.ok) {
-        caches.open(SHELL_CACHE).then((c) => c.put(request, response));
-      }
-    }).catch(() => {});
+  if(cached){
     return injetarReconexaoDrive(cached, request);
   }
-  // Não está no cache, busca da rede
-  try {
-    const response = await fetch(request);
-    if (response && response.ok) {
+
+  try{
+    const fresh = await fetch(request);
+    if(fresh.ok){
       const cache = await caches.open(SHELL_CACHE);
-      cache.put(request, response.clone());
+      await cache.put(request, fresh.clone());
     }
-    return injetarReconexaoDrive(response, request);
-  } catch (err) {
-    // Sem rede e sem cache — retorna fallback para HTML
-    if (request.headers.get('accept')?.includes('text/html')) {
-      const fallback = await caches.match('./index.html');
-      return injetarReconexaoDrive(fallback, request);
-    }
-    throw err;
+    return injetarReconexaoDrive(fresh, request);
+  }catch(e){
+    return cached || new Response('Offline', {status:503});
   }
 }
 
-// Network-first: tenta rede primeiro, cai pro cache se falhar
-async function networkFirst(request) {
-  try {
-    const response = await fetch(request);
-    if (response && response.ok) {
+async function networkFirst(request){
+  try{
+    const fresh = await fetch(request);
+    if(fresh.ok){
       const cache = await caches.open(RUNTIME_CACHE);
-      cache.put(request, response.clone());
+      await cache.put(request, fresh.clone());
     }
-    return response;
-  } catch (err) {
+    return fresh;
+  }catch(e){
     const cached = await caches.match(request);
-    if (cached) return cached;
-    throw err;
+    return cached || new Response('Offline', {status:503});
   }
 }
 
-// Stale-while-revalidate: serve do cache e atualiza em paralelo
-async function staleWhileRevalidate(request) {
-  const cache = await caches.open(RUNTIME_CACHE);
-  const cached = await cache.match(request);
-  const fetchPromise = fetch(request).then((response) => {
-    if (response && response.ok) cache.put(request, response.clone());
-    return response;
-  }).catch(() => cached);
-  return cached || fetchPromise;
+async function staleWhileRevalidate(request){
+  const cached = await caches.match(request);
+  const update = fetch(request).then((fresh) => {
+    if(fresh.ok){
+      return caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, fresh.clone())).then(() => fresh);
+    }
+    return fresh;
+  }).catch(() => null);
+  return cached || (await update) || new Response('', {status:503});
 }
-
-// ============================================================
-// MENSAGENS — para atualização manual via página
-// ============================================================
-self.addEventListener('message', (event) => {
-  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
-});
