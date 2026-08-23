@@ -2,25 +2,24 @@
 // GOOGLE DRIVE — reconexão automática após abrir/recarregar o app
 // Carregado pelo Service Worker após o shell principal.
 //
-// Melhoria: guarda a conta Google usada no Drive e envia login_hint
-// nas próximas autorizações. Assim, quando o Google já conhece a
-// sessão, a seleção de contas pode ser pulada automaticamente.
+// Melhoria: identifica a conta Google dona do arquivo de backup
+// e usa essa conta como login_hint nas próximas autorizações.
 // ============================================================
 (function autoReconnectDrive(){
   const EMAIL_KEY = 'driveAccountEmail';
 
-  async function lembrarConta(accessToken){
+  async function lembrarConta(accessToken, fileId){
     try{
-      if(!accessToken) return;
-      const resp = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', {
+      if(!accessToken || !fileId) return;
+      const resp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=owners(emailAddress)`, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       if(!resp.ok) return;
       const data = await resp.json();
-      const email = data?.user?.emailAddress;
+      const email = data?.owners?.find(owner => owner?.emailAddress)?.emailAddress;
       if(email) localStorage.setItem(EMAIL_KEY, email);
     }catch(e){
-      console.warn('[Drive] não foi possível guardar a conta:', e);
+      console.warn('[Drive] não foi possível identificar a conta:', e);
     }
   }
 
@@ -36,7 +35,10 @@
         const wrappedConfig = {
           ...config,
           callback: (response) => {
-            if(response?.access_token) void lembrarConta(response.access_token);
+            if(response?.access_token){
+              const fileId = (typeof driveState !== 'undefined') ? driveState.fileId : null;
+              void lembrarConta(response.access_token, fileId);
+            }
             return originalCallback?.(response);
           }
         };
