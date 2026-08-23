@@ -94,8 +94,8 @@ self.addEventListener('fetch', (event) => {
 async function injetarReconexaoDrive(response, request) {
   if(!response || !response.ok) return response;
   if(!request.headers.get('accept')?.includes('text/html')) return response;
-  if(!new URL(request.url).pathname.endsWith('/index.html') &&
-     new URL(request.url).pathname !== '/') return response;
+  const path = new URL(request.url).pathname;
+  if(!path.endsWith('/index.html') && path !== '/') return response;
 
   try{
     const html = await response.clone().text();
@@ -106,10 +106,17 @@ async function injetarReconexaoDrive(response, request) {
       '<script src="./drive-reconnect.js" defer><\/script>\n</body>'
     );
 
+    const headers = new Headers(response.headers);
+    // O corpo foi reconstruído, então não podemos reutilizar metadados
+    // de compressão/tamanho do payload original.
+    headers.delete('content-length');
+    headers.delete('content-encoding');
+    headers.delete('etag');
+
     return new Response(atualizado, {
       status: response.status,
       statusText: response.statusText,
-      headers: response.headers
+      headers
     });
   }catch(e){
     console.warn('[SW] Não foi possível injetar reconexão Drive:', e);
