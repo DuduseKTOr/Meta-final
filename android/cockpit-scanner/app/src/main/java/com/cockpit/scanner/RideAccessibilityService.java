@@ -4,63 +4,67 @@ import android.accessibilityservice.AccessibilityService;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-
 /**
- * Observation-only service. It reads accessible UI text from the selected apps and never calls
- * performAction(), dispatchGesture(), launches intents, or changes another application's UI.
+ * Observation-only diagnostics service. It never performs actions, gestures, clicks, intents,
+ * or UI changes in another app. Raw UI text is intentionally not retained.
  */
 public final class RideAccessibilityService extends AccessibilityService {
-    private static final int MAX_TEXT_ITEMS = 40;
-
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
-        String platform = platformFor(event.getPackageName().toString());
-        if (platform == null) return;
 
-        Set<String> text = new LinkedHashSet<>();
-        for (CharSequence value : event.getText()) addText(text, value);
+        String packageName = event.getPackageName().toString();
+        String platform = platformFor(packageName);
+        boolean supported = platform != null;
+        int visibleTextItems = 0;
+        boolean rootAvailable = false;
 
-        // Reading the active window's node tree is passive; no action is performed on nodes.
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root != null) {
-            collectVisibleText(root, text);
-            root.recycle();
+        // Inspect only known driver apps, only long enough to count accessible text nodes.
+        // Unknown foreground apps are logged by package/event metadata only.
+        if (supported) {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root != null) {
+                rootAvailable = true;
+                visibleTextItems = countVisibleTextItems(root);
+                root.recycle();
+            }
         }
-        CaptureStore.add(platform, AccessibilityEvent.eventTypeToString(event.getEventType()),
-                new ArrayList<>(text));
+
+        CaptureStore.recordEvent(
+                packageName,
+                AccessibilityEvent.eventTypeToString(event.getEventType()),
+                platform,
+                rootAvailable,
+                visibleTextItems);
     }
 
     @Override public void onInterrupt() { /* No feedback channel to stop. */ }
 
     private static String platformFor(String packageName) {
-        if (packageName.equals("com.ubercab")) return "Uber";
-        if (packageName.equals("com.taxis99")) return "99";
+        if (packageName.equals("com.ubercab.driver")) return "Uber Driver";
+        if (packageName.equals("com.app99.driver")) return "99 Motorista";
+        // inDrive uses one package for rider and driver modes.
         if (packageName.equals("sinet.startup.inDriver")) return "inDrive";
         return null;
     }
 
-    private static void collectVisibleText(AccessibilityNodeInfo node, Set<String> out) {
-        if (out.size() >= MAX_TEXT_ITEMS || node == null) return;
-        if (node.isVisibleToUser()) {
-            addText(out, node.getText());
-            addText(out, node.getContentDescription());
+    private static int countVisibleTextItems(AccessibilityNodeInfo node) {
+        if (node == null) return 0;
+        int count = 0;
+        if (node.isVisibleToUser() && (hasText(node.getText())
+                || hasText(node.getContentDescription()))) {
+            count++;
         }
-        for (int i = 0; i < node.getChildCount() && out.size() < MAX_TEXT_ITEMS; i++) {
+        for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
             if (child != null) {
-                collectVisibleText(child, out);
+                count += countVisibleTextItems(child);
                 child.recycle();
             }
         }
+        return count;
     }
 
-    private static void addText(Set<String> out, CharSequence value) {
-        if (value == null) return;
-        String normalized = value.toString().trim().replaceAll("\\s+", " ");
-        if (!normalized.isEmpty()) out.add(normalized);
+    private static boolean hasText(CharSequence value) {
+        return value != null && value.toString().trim().length() > 0;
     }
 }

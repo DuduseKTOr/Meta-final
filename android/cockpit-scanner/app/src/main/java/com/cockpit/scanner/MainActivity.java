@@ -19,6 +19,7 @@ import java.util.List;
 
 public final class MainActivity extends Activity {
     private TextView statusView;
+    private TextView summaryView;
     private TextView countView;
     private TextView captureView;
     private final CaptureStore.Listener listener = this::render;
@@ -38,11 +39,11 @@ public final class MainActivity extends Activity {
         column.setPadding(pad, pad, pad, pad);
         column.setBackgroundColor(Color.rgb(16, 17, 20));
 
-        TextView title = text("Cockpit Scanner", 24, Color.WHITE);
-        column.addView(title);
-        TextView subtitle = text("Laboratório somente leitura — Uber, 99 e inDrive", 14, Color.LTGRAY);
-        column.addView(subtitle);
-        TextView warning = text("Este app apenas observa textos acessíveis. Ele não toca, aceita, recusa ou controla corridas.", 14, Color.rgb(129, 199, 132));
+        column.addView(text("Cockpit Scanner", 24, Color.WHITE));
+        column.addView(text("Diagnóstico somente leitura — Uber Driver, 99 Motorista e inDrive",
+                14, Color.LTGRAY));
+        TextView warning = text("Não toca, aceita, recusa ou controla outros apps. "
+                + "Textos da interface não são armazenados.", 14, Color.rgb(129, 199, 132));
         warning.setPadding(0, dp(12), 0, dp(12));
         column.addView(warning);
 
@@ -51,13 +52,18 @@ public final class MainActivity extends Activity {
         column.addView(statusView);
 
         Button settings = new Button(this);
-        settings.setText("ATIVAR SERVIÇO DE LEITURA");
+        settings.setText("ABRIR CONFIGURAÇÕES DE ACESSIBILIDADE");
         settings.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         column.addView(settings);
 
+        summaryView = text("", 13, Color.LTGRAY);
+        summaryView.setPadding(0, dp(8), 0, dp(8));
+        summaryView.setTextIsSelectable(true);
+        column.addView(summaryView);
+
         LinearLayout actions = new LinearLayout(this);
         actions.setGravity(Gravity.CENTER_VERTICAL);
-        countView = text("0 capturas", 14, Color.LTGRAY);
+        countView = text("", 14, Color.LTGRAY);
         actions.addView(countView, new LinearLayout.LayoutParams(0, -2, 1));
         Button clear = new Button(this);
         clear.setText("LIMPAR");
@@ -81,7 +87,9 @@ public final class MainActivity extends Activity {
                 statusView.setText(enabled ? "Serviço: ATIVO ✓" : "Serviço: DESATIVADO");
                 statusView.setTextColor(enabled ? Color.rgb(129, 199, 132) : Color.rgb(255, 193, 7));
             }
-            if (countView != null) countView.setText(CaptureStore.count() + " captura(s) nesta sessão");
+            if (summaryView != null) summaryView.setText(CaptureStore.summary());
+            if (countView != null) countView.setText(CaptureStore.eventCount()
+                    + " evento(s) • " + CaptureStore.observationCount() + " reconhecido(s)");
             if (captureView != null) captureView.setText(CaptureStore.snapshot());
         });
     }
@@ -91,14 +99,11 @@ public final class MainActivity extends Activity {
         if (manager == null) return false;
         List<AccessibilityServiceInfo> services = manager.getEnabledAccessibilityServiceList(
                 AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
-        String expected = getPackageName() + "/.RideAccessibilityService";
         for (AccessibilityServiceInfo info : services) {
-            if (info.getResolveInfo() != null && info.getResolveInfo().serviceInfo != null) {
-                String name = info.getResolveInfo().serviceInfo.packageName + "/."
-                        + info.getResolveInfo().serviceInfo.name.substring(
-                        info.getResolveInfo().serviceInfo.name.lastIndexOf('.') + 1);
-                if (expected.equals(name)) return true;
-            }
+            if (info.getResolveInfo() != null && info.getResolveInfo().serviceInfo != null
+                    && getPackageName().equals(info.getResolveInfo().serviceInfo.packageName)
+                    && RideAccessibilityService.class.getName().equals(
+                    info.getResolveInfo().serviceInfo.name)) return true;
         }
         return false;
     }
