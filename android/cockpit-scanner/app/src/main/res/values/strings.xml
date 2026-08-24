@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Cockpit Scanner</string>
+    <string name="accessibility_description">Laboratório somente leitura: mostra textos acessíveis de Uber, 99 e inDrive no próprio aparelho. Não toca, aceita, recusa ou controla nenhum outro app.</string>
+</resources>
