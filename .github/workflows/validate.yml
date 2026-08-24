@@ -1,0 +1,84 @@
+name: Validate PWA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required PWA files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(index.html manifest.json sw.js)
+          for file in "${required[@]}"; do
+            test -f "$file" || { echo "Arquivo obrigatório ausente: $file"; exit 1; }
+          done
+
+      - name: Validate manifest JSON
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path('manifest.json').read_text(encoding='utf-8'))
+          required = ('name', 'short_name', 'start_url', 'display', 'icons')
+          missing = [key for key in required if key not in manifest]
+          if missing:
+              raise SystemExit(f'Campos obrigatórios ausentes no manifest.json: {missing}')
+          if not manifest['icons']:
+              raise SystemExit('manifest.json precisa ter pelo menos um ícone')
+          print('manifest.json OK')
+          PY
+
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          html = Path('index.html').read_text(encoding='utf-8-sig')
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, re.IGNORECASE | re.DOTALL)
+          if not scripts:
+              raise SystemExit('Nenhum bloco JavaScript encontrado em index.html')
+
+          Path('/tmp/app-inline.js').write_text('\n;\n'.join(scripts), encoding='utf-8')
+          print(f'{len(scripts)} bloco(s) JavaScript encontrado(s)')
+          PY
+          node --check /tmp/app-inline.js
+          node --check sw.js
+
+      - name: Validate service worker shell references
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          sw = Path('sw.js').read_text(encoding='utf-8')
+          match = re.search(r'const\s+SHELL_FILES\s*=\s*\[(.*?)\];', sw, re.DOTALL)
+          if not match:
+              raise SystemExit('SHELL_FILES não encontrado em sw.js')
+
+          files = re.findall(r"['\"](\.\/[^'\"]+)['\"]", match.group(1))
+          missing = [f for f in files if not Path(f).exists()]
+          if missing:
+              raise SystemExit(f'Arquivos referenciados no shell do service worker não encontrados: {missing}')
+
+          print('Referências do service worker OK')
+          PY
