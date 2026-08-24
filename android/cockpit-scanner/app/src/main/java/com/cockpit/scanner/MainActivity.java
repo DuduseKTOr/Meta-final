@@ -1,18 +1,24 @@
 package com.cockpit.scanner;
 
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
+import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import java.util.List;
+
 public final class MainActivity extends Activity {
+    private TextView statusView;
     private TextView countView;
     private TextView captureView;
     private final CaptureStore.Listener listener = this::render;
@@ -40,6 +46,10 @@ public final class MainActivity extends Activity {
         warning.setPadding(0, dp(12), 0, dp(12));
         column.addView(warning);
 
+        statusView = text("Serviço: verificando…", 15, Color.WHITE);
+        statusView.setPadding(0, 0, 0, dp(8));
+        column.addView(statusView);
+
         Button settings = new Button(this);
         settings.setText("ATIVAR SERVIÇO DE LEITURA");
         settings.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
@@ -66,9 +76,31 @@ public final class MainActivity extends Activity {
 
     private void render() {
         runOnUiThread(() -> {
+            if (statusView != null) {
+                boolean enabled = isScannerServiceEnabled();
+                statusView.setText(enabled ? "Serviço: ATIVO ✓" : "Serviço: DESATIVADO");
+                statusView.setTextColor(enabled ? Color.rgb(129, 199, 132) : Color.rgb(255, 193, 7));
+            }
             if (countView != null) countView.setText(CaptureStore.count() + " captura(s) nesta sessão");
             if (captureView != null) captureView.setText(CaptureStore.snapshot());
         });
+    }
+
+    private boolean isScannerServiceEnabled() {
+        AccessibilityManager manager = (AccessibilityManager) getSystemService(Context.ACCESSIBILITY_SERVICE);
+        if (manager == null) return false;
+        List<AccessibilityServiceInfo> services = manager.getEnabledAccessibilityServiceList(
+                AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
+        String expected = getPackageName() + "/.RideAccessibilityService";
+        for (AccessibilityServiceInfo info : services) {
+            if (info.getResolveInfo() != null && info.getResolveInfo().serviceInfo != null) {
+                String name = info.getResolveInfo().serviceInfo.packageName + "/."
+                        + info.getResolveInfo().serviceInfo.name.substring(
+                        info.getResolveInfo().serviceInfo.name.lastIndexOf('.') + 1);
+                if (expected.equals(name)) return true;
+            }
+        }
+        return false;
     }
 
     private TextView text(String value, int size, int color) {
