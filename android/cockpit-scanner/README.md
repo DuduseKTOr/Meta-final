@@ -1,57 +1,29 @@
 # Cockpit Scanner (laboratório Android)
 
-Projeto Android isolado do PWA principal. O objetivo deste primeiro marco é visualizar, no próprio tablet, o texto que Uber, 99 e inDrive expõem à API de Acessibilidade do Android.
+Projeto Android isolado do PWA principal. Ele é um laboratório de diagnóstico para verificar se o Android entrega eventos de acessibilidade das versões de **motorista** de Uber, 99 e inDrive.
 
-## Limites de segurança
+## Limites de segurança e privacidade
 
-- Somente observa eventos e textos acessíveis de `com.ubercab`, `com.taxis99` e `sinet.startup.inDriver`.
-- Não chama `performAction`, `dispatchGesture`, cliques, toques, aceites, recusas ou qualquer controle de outro app.
-- Mantém os dados apenas em memória durante a sessão; não grava nem envia capturas pela rede.
-- Este laboratório não interpreta ainda uma oferta como corrida nem cria lançamentos no Cockpit. Essa será uma etapa posterior, depois de validarmos os dados reais expostos por cada plataforma.
+- Observa apenas eventos; nunca chama `performAction`, `dispatchGesture`, cliques, toques, aceites, recusas, intents para outros apps ou qualquer controle de interface.
+- Os pacotes reconhecidos são: Uber Driver (`com.ubercab.driver`), 99 Motorista (`com.app99.driver`) e inDrive (`sinet.startup.inDriver`, usado pelos modos passageiro e motorista).
+- Para qualquer aplicativo, a tela registra somente pacote, tipo e contagem de eventos. Isso permite descobrir um pacote inesperado sem ler seu conteúdo.
+- Para os três apps reconhecidos, registra a disponibilidade da árvore e a quantidade de nós com texto visível. **Não armazena, grava ou envia textos, valores, endereços, nomes, números de telefone ou dados financeiros.**
+- Todo diagnóstico fica apenas na memória durante a sessão. Limpar ou fechar o processo remove os dados.
 
-## Abrir e compilar
+## Diagnóstico da primeira execução
 
-1. Abra esta pasta (`android/cockpit-scanner`) no Android Studio Ladybug ou mais recente.
-2. Instale o Android SDK Platform 35 quando o Android Studio solicitar.
-3. Aguarde a sincronização do Gradle e selecione **Run > Run 'app'** em um dispositivo Android com API 26 ou superior.
+A configuração anterior limitava o serviço aos pacotes de passageiro da Uber e 99, fazendo com que o Android não encaminhasse eventos do Uber Driver nem do 99 Motorista. Agora a configuração recebe eventos de primeiro plano sem filtro de pacote, mas o app trata conteúdo somente para os três pacotes conhecidos e sempre em modo de contagem, sem retenção do texto.
 
-Também é possível usar um Gradle local instalado:
+A tela mostra:
 
-```bash
-gradle :app:assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+- se o serviço está ativo;
+- total de eventos e observações de apps reconhecidos;
+- último pacote em primeiro plano;
+- contagem por pacote, inclusive os ainda não reconhecidos;
+- diagnóstico de árvore acessível para cada app de motorista reconhecido.
 
-O workflow do GitHub Actions também gera o artefato `cockpit-scanner-debug-apk` para facilitar a instalação no tablet após uma execução bem-sucedida.
+## Compilação e artefato
 
-## Teste manual no tablet
+O workflow **Build Cockpit Scanner debug APK** monta `app-debug.apk` e publica o artefato `cockpit-scanner-debug-apk` por 14 dias em cada pull request ou execução manual.
 
-1. Instale e abra o **Cockpit Scanner**.
-2. Toque em **ATIVAR SERVIÇO DE LEITURA**.
-3. Em Acessibilidade, ative **Cockpit Scanner (somente leitura)** e confirme o aviso do Android.
-4. Volte ao Scanner e confirme que o serviço está ativo.
-5. Abra **somente uma plataforma por vez**: Uber, depois 99, depois inDrive.
-6. Em cada plataforma, deixe aparecer uma tela de oferta ou resultado e navegue apenas como faria normalmente.
-7. Retorne ao Scanner: os textos acessíveis e o tipo do evento aparecem na tela, identificados pela plataforma.
-8. Use **LIMPAR** entre os testes para manter cada coleta separada.
-9. Desative o serviço em Acessibilidade ao terminar.
-
-## O que queremos descobrir
-
-Para cada plataforma, registre se o Scanner conseguiu expor:
-
-- valor da oferta ou do resultado;
-- distância;
-- duração/tempo estimado;
-- origem/destino, quando houver;
-- outros textos relevantes da tela.
-
-Não é necessário aceitar uma corrida apenas para testar a leitura. Se uma oferta aparecer naturalmente durante o uso, ela já serve para o primeiro diagnóstico.
-
-## Critérios deste marco
-
-- A tela mostra qual plataforma e evento originaram a captura.
-- Nenhuma automação de interface é executada.
-- Texto ausente não gera uma entrada vazia.
-- As capturas ficam somente em memória no aparelho durante a sessão.
-- O teste deve ser feito com cada app instalado, porque o texto acessível varia por versão e dispositivo.
+Não testar ou instalar este APK em um dispositivo que ainda esteja em recuperação/validação de aplicativo financeiro. A validação em dispositivo só será retomada após o reset e a confirmação do acesso bancário, com uma versão do APK validada pelo CI.
