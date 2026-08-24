@@ -1,0 +1,36 @@
+name: Validate Android Scanner
+
+on:
+  push:
+    paths:
+      - 'android/cockpit-scanner/**'
+      - '.github/workflows/validate-android-scanner.yml'
+  pull_request:
+    paths:
+      - 'android/cockpit-scanner/**'
+      - '.github/workflows/validate-android-scanner.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android/cockpit-scanner
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --no-daemon
