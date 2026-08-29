@@ -1,0 +1,122 @@
+name: Build Cockpit Motorista APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  GRADLE_VERSION: 8.9
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Create Android wrapper project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/cockpit-motorista/app/src/main/java/br/com/cockpitmotorista
+          mkdir -p android/cockpit-motorista/app/src/main/res/values
+          cat > android/cockpit-motorista/settings.gradle <<'EOF'
+pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+rootProject.name='CockpitMotorista'
+include ':app'
+EOF
+          cat > android/cockpit-motorista/build.gradle <<'EOF'
+plugins {
+    id 'com.android.application' version '8.5.2' apply false
+}
+EOF
+          cat > android/cockpit-motorista/gradle.properties <<'EOF'
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+EOF
+          cat > android/cockpit-motorista/app/build.gradle <<'EOF'
+plugins { id 'com.android.application' }
+
+android { namespace 'br.com.cockpitmotorista'; compileSdk 35
+    defaultConfig { applicationId 'br.com.cockpitmotorista'; minSdk 23; targetSdk 35; versionCode 1; versionName '1.0' }
+}
+EOF
+          cat > android/cockpit-motorista/app/src/main/res/values/strings.xml <<'EOF'
+<resources><string name="app_name">Cockpit Motorista</string></resources>
+EOF
+          cat > android/cockpit-motorista/app/src/main/AndroidManifest.xml <<'EOF'
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <application android:theme="@style/AppTheme" android:label="Cockpit Motorista" android:usesCleartextTraffic="false" android:hardwareAccelerated="true">
+    <activity android:name=".MainActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>
+EOF
+          cat > android/cockpit-motorista/app/src/main/res/values/styles.xml <<'EOF'
+<resources><style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#BE185D</item><item name="android:navigationBarColor">#0A0612</item><item name="android:statusBarColor">#0A0612</item><item name="android:windowLightStatusBar">false</item></style></resources>
+EOF
+          cat > android/cockpit-motorista/app/src/main/java/br/com/cockpitmotorista/MainActivity.java <<'EOF'
+package br.com.cockpitmotorista;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+
+public class MainActivity extends Activity {
+  private WebView web;
+  @Override public void onCreate(Bundle state) {
+    super.onCreate(state);
+    web = new WebView(this);
+    WebSettings s = web.getSettings();
+    s.setJavaScriptEnabled(true);
+    s.setDomStorageEnabled(true);
+    s.setDatabaseEnabled(true);
+    s.setSupportMultipleWindows(true);
+    s.setJavaScriptCanOpenWindowsAutomatically(true);
+    web.setWebViewClient(new WebViewClient());
+    web.setWebChromeClient(new WebChromeClient());
+    setContentView(web);
+    web.loadUrl("https://dudusektor.github.io/Meta-final/index.html");
+  }
+  @Override public void onBackPressed() {
+    if (web.canGoBack()) web.goBack(); else super.onBackPressed();
+  }
+}
+EOF
+          cd android/cockpit-motorista
+          curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          /tmp/gradle-${GRADLE_VERSION}/bin/gradle assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: cockpit-motorista-debug
+          path: android/cockpit-motorista/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
