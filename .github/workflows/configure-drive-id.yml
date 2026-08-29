@@ -1,0 +1,35 @@
+name: Configure Drive Client ID
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Inject Google OAuth Client ID
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8-sig')
+          old = "clientId: localStorage.getItem('driveClientId') || '',"
+          new = "clientId: localStorage.getItem('driveClientId') || '671296748305-utfg36q93jghomodqvvf6i644m730jeu.apps.googleusercontent.com',"
+          if old not in s:
+              raise SystemExit('Ponto de configuração do Drive não encontrado')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Commit configured Client ID
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Configura Client ID do Google Drive"
+          git push
